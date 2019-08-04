@@ -15,7 +15,8 @@ import (
 var logger = log.New(os.Stdout, "", 0)
 
 const (
-	leasesFile            = "dhcpd.leases"
+	defaultLeasesFile     = "/var/lib/dhcp/dhcpd.leases"
+	defaultOuiFile        = "/usr/local/etc/oui.txt"
 	leaseTimeFormatString = "2006/01/02 15:04:05;"
 	ouputTimeFormatString = "2006/01/02 15:04:05 -0700"
 )
@@ -36,8 +37,13 @@ func (li *leaseInfo) String() string {
 
 type leaseMap map[string]*leaseInfo
 
-func readLeasesFile() leaseMap {
+func readLeasesFile(leaseMapChannel chan leaseMap) {
 	leaseMap := make(leaseMap)
+
+	leasesFile := defaultLeasesFile
+	if envValue, ok := os.LookupEnv("DHCP_LEASES_FILE"); ok {
+		leasesFile = envValue
+	}
 
 	logger.Printf("reading %v", leasesFile)
 	file, err := os.OpenFile(leasesFile, os.O_RDONLY, os.ModePerm)
@@ -126,16 +132,71 @@ func readLeasesFile() leaseMap {
 		log.Fatalf("scan file error: %v", err)
 	}
 
-	logger.Printf("read %v lines", lineNumber)
+	logger.Printf("read %v lines from %v", lineNumber, leasesFile)
 
-	return leaseMap
+	leaseMapChannel <- leaseMap
 }
 
-func printLeaseMap(leaseMap leaseMap) {
-	const formatString = "%-17v%-19v%-6v%-22v%-27v%-27v%-27v"
+type ouiMap map[string]string
 
-	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "Start Time", "End Time", "Last Transaction Time")
-	logger.Printf(strings.Repeat("#", 145))
+func isHexDigits(s string) bool {
+	for _, r := range s {
+		if !(('0' <= r && '9' >= r) || ('a' <= r && 'f' >= r) || ('A' <= r && 'F' >= r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func readOuiFile(ouiMapChannel chan ouiMap) {
+	ouiMap := make(ouiMap)
+
+	ouiFile := defaultOuiFile
+	if envValue, ok := os.LookupEnv("OUI_FILE"); ok {
+		ouiFile = envValue
+	}
+
+	logger.Printf("reading %v", ouiFile)
+	file, err := os.OpenFile(ouiFile, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		logger.Fatalf("Failed to open file %v %s\n", ouiFile, err.Error())
+	}
+	defer file.Close()
+
+	lineNumber := 0
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lineNumber++
+
+		line := strings.TrimSpace(scanner.Text())
+
+		if len(line) < 23 {
+			continue
+		}
+
+		ouiString := line[0:6]
+		if !isHexDigits(ouiString) {
+			continue
+		}
+
+		ouiString = strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
+		ouiMap[strings.ToLower(ouiString)] = line[22:]
+	}
+
+	if err = scanner.Err(); err != nil {
+		log.Fatalf("scan file error: %v", err)
+	}
+
+	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
+
+	ouiMapChannel <- ouiMap
+}
+
+func printLeaseMap(leaseMap leaseMap, ouiMap ouiMap) {
+	const formatString = "%-17v%-19v%-6v%-22v%-27v%-27v%-27v%-24v"
+
+	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "Start Time", "End Time", "Last Transaction Time", "Organization")
+	logger.Printf(strings.Repeat("#", 180))
 
 	ipAddresses := make([]net.IP, 0, len(leaseMap))
 	for _, leaseInfo := range leaseMap {
@@ -149,18 +210,34 @@ func printLeaseMap(leaseMap leaseMap) {
 	for _, ipAddress := range ipAddresses {
 		ipString := ipAddress.String()
 		leaseInfo := leaseMap[ipString]
+		macString := leaseInfo.macAddress.String()
+		ouiString := strings.ToLower(macString[0:8])
+		organization, ok := ouiMap[ouiString]
+		if !ok {
+			organization = "UNKNOWN"
+		}
 		logger.Printf(
 			formatString,
-			ipString, leaseInfo.macAddress.String(),
+			ipString,
+			macString,
 			leaseInfo.count,
 			leaseInfo.hostname,
 			leaseInfo.startTime.Format(ouputTimeFormatString),
 			leaseInfo.endTime.Format(ouputTimeFormatString),
-			leaseInfo.clttTime.Format(ouputTimeFormatString))
+			leaseInfo.clttTime.Format(ouputTimeFormatString),
+			organization)
 	}
 }
 
 func main() {
-	leaseMap := readLeasesFile()
-	printLeaseMap(leaseMap)
+	leaseMapChannel := make(chan leaseMap)
+	go readLeasesFile(leaseMapChannel)
+
+	ouiMapChannel := make(chan ouiMap)
+	go readOuiFile(ouiMapChannel)
+
+	leaseMap := <-leaseMapChannel
+	ouiMap := <-ouiMapChannel
+
+	printLeaseMap(leaseMap, ouiMap)
 }
