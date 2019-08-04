@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
-
 	"fmt"
 	"log"
 	"net"
@@ -13,19 +11,18 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/boltdb/bolt"
 )
 
 var logger = log.New(os.Stdout, "", 0)
 
 const (
-	defaultLeasesFile     = "/var/lib/dhcp/dhcpd.leases"
-	defaultOuiFile        = "/usr/local/etc/oui.txt"
-	ouiDBDriver           = "sqlite3"
-	ouiDBCreateDSN        = "file:./oui.db?mode=rwc"
-	ouiDBReadDSN          = "file:./oui.db?mode=ro"
-	leaseTimeFormatString = "2006/01/02 15:04:05;"
-	ouputTimeFormatString = "2006/01/02 15:04:05 -0700"
+	defaultLeasesFile       = "/var/lib/dhcp/dhcpd.leases"
+	defaultOuiFile          = "/usr/local/etc/oui.txt"
+	ouiDBFile               = "./oui.db"
+	ouiToOrganizationBucket = "ouiToOrganization"
+	leaseTimeFormatString   = "2006/01/02 15:04:05;"
+	ouputTimeFormatString   = "2006/01/02 15:04:05 -0700"
 )
 
 func isHexDigits(s string) bool {
@@ -43,21 +40,11 @@ func createOuiDB() {
 		ouiFile = envValue
 	}
 
-	database, err := sql.Open(ouiDBDriver, ouiDBCreateDSN)
+	db, err := bolt.Open(ouiDBFile, 0600, nil)
 	if err != nil {
-		logger.Fatalf("error opening db dsn %v %v", ouiDBCreateDSN, err.Error())
+		log.Fatal(err)
 	}
-	defer database.Close()
-
-	statement, err := database.Prepare("CREATE TABLE IF NOT EXISTS oui (oui TEXT PRIMARY KEY, organization TEXT)")
-	if err != nil {
-		logger.Fatalf("error preparing statemnt %v", err.Error())
-	}
-
-	_, err = statement.Exec()
-	if err != nil {
-		logger.Fatalf("error executing statemnt %v", err.Error())
-	}
+	defer db.Close()
 
 	logger.Printf("reading %v", ouiFile)
 	file, err := os.OpenFile(ouiFile, os.O_RDONLY, os.ModePerm)
@@ -69,37 +56,44 @@ func createOuiDB() {
 	insertedKeys := make(map[string]bool)
 	lineNumber := 0
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lineNumber++
 
-		line := strings.TrimSpace(scanner.Text())
+	if err := db.Update(func(tx *bolt.Tx) error {
 
-		if len(line) < 23 {
-			continue
-		}
-
-		ouiString := line[0:6]
-		if !isHexDigits(ouiString) {
-			continue
-		}
-
-		ouiKeyString := strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
-		organization := line[22:]
-
-		if insertedKeys[ouiKeyString] {
-			continue
-		}
-		insertedKeys[ouiKeyString] = true
-
-		statement, err = database.Prepare("INSERT INTO oui (oui, organization) VALUES (?, ?)")
+		bucket, err := tx.CreateBucket([]byte(ouiToOrganizationBucket))
 		if err != nil {
-			logger.Fatalf("error preparing statemnt %v", err.Error())
+			return err
 		}
 
-		_, err = statement.Exec(ouiKeyString, organization)
-		if err != nil {
-			logger.Fatalf("error executing statemnt %v", err.Error())
+		for scanner.Scan() {
+			lineNumber++
+
+			line := strings.TrimSpace(scanner.Text())
+
+			if len(line) < 23 {
+				continue
+			}
+
+			ouiString := line[0:6]
+			if !isHexDigits(ouiString) {
+				continue
+			}
+
+			ouiKeyString := strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
+			organization := line[22:]
+
+			if insertedKeys[ouiKeyString] {
+				continue
+			}
+			insertedKeys[ouiKeyString] = true
+
+			if err = bucket.Put([]byte(ouiKeyString), []byte(organization)); err != nil {
+				return err
+			}
 		}
+
+		return nil
+	}); err != nil {
+		log.Fatalf("db.Update error %v", err)
 	}
 
 	if err = scanner.Err(); err != nil {
@@ -226,11 +220,11 @@ func readLeasesFile() leaseMap {
 }
 
 func printLeaseMap(leaseMap leaseMap) {
-	database, err := sql.Open(ouiDBDriver, ouiDBReadDSN)
+	db, err := bolt.Open(ouiDBFile, 0600, &bolt.Options{ReadOnly: true})
 	if err != nil {
-		logger.Fatalf("error opening db dsn %v %v", ouiDBReadDSN, err.Error())
+		log.Fatal(err)
 	}
-	defer database.Close()
+	defer db.Close()
 
 	const formatString = "%-17v%-19v%-6v%-22v%-27v%-27v%-27v%-24v"
 
@@ -251,19 +245,16 @@ func printLeaseMap(leaseMap leaseMap) {
 		ipString := ipAddress.String()
 		leaseInfo := leaseMap[ipString]
 		macString := leaseInfo.macAddress.String()
-		ouiString := strings.ToLower(macString[0:8])
+		ouiKeyString := strings.ToLower(macString[0:8])
 		organization := "UNKNOWN"
 
-		rows, err := database.Query("SELECT organization FROM oui WHERE oui = ?", ouiString)
-		if err != nil {
-			logger.Fatalf("db Query error %v", err.Error())
-		}
-		if rows.Next() {
-			rows.Scan(&organization)
-		}
-		err = rows.Close()
-		if err != nil {
-			logger.Fatalf("error closing rows %v", err.Error())
+		if err := db.View(func(tx *bolt.Tx) error {
+			if value := tx.Bucket([]byte(ouiToOrganizationBucket)).Get([]byte(ouiKeyString)); value != nil {
+				organization = string(value)
+			}
+			return nil
+		}); err != nil {
+			log.Fatal(err)
 		}
 
 		logger.Printf(
