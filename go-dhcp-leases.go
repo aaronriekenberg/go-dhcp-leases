@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"database/sql"
+
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var logger = log.New(os.Stdout, "", 0)
@@ -17,9 +21,93 @@ var logger = log.New(os.Stdout, "", 0)
 const (
 	defaultLeasesFile     = "/var/lib/dhcp/dhcpd.leases"
 	defaultOuiFile        = "/usr/local/etc/oui.txt"
+	ouiDBDriver           = "sqlite3"
+	ouiDBCreateDSN        = "file:./oui.db?mode=rwc"
+	ouiDBReadDSN          = "file:./oui.db?mode=ro"
 	leaseTimeFormatString = "2006/01/02 15:04:05;"
 	ouputTimeFormatString = "2006/01/02 15:04:05 -0700"
 )
+
+func isHexDigits(s string) bool {
+	for _, r := range s {
+		if !(('0' <= r && '9' >= r) || ('a' <= r && 'f' >= r) || ('A' <= r && 'F' >= r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func createOuiDB() {
+	ouiFile := defaultOuiFile
+	if envValue, ok := os.LookupEnv("OUI_FILE"); ok {
+		ouiFile = envValue
+	}
+
+	database, err := sql.Open(ouiDBDriver, ouiDBCreateDSN)
+	if err != nil {
+		logger.Fatalf("error opening db dsn %v %v", ouiDBCreateDSN, err.Error())
+	}
+	defer database.Close()
+
+	statement, err := database.Prepare("CREATE TABLE IF NOT EXISTS oui (oui TEXT PRIMARY KEY, organization TEXT)")
+	if err != nil {
+		logger.Fatalf("error preparing statemnt %v", err.Error())
+	}
+
+	_, err = statement.Exec()
+	if err != nil {
+		logger.Fatalf("error executing statemnt %v", err.Error())
+	}
+
+	logger.Printf("reading %v", ouiFile)
+	file, err := os.OpenFile(ouiFile, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		logger.Fatalf("Failed to open file %v %s\n", ouiFile, err.Error())
+	}
+	defer file.Close()
+
+	insertedKeys := make(map[string]bool)
+	lineNumber := 0
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lineNumber++
+
+		line := strings.TrimSpace(scanner.Text())
+
+		if len(line) < 23 {
+			continue
+		}
+
+		ouiString := line[0:6]
+		if !isHexDigits(ouiString) {
+			continue
+		}
+
+		ouiKeyString := strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
+		organization := line[22:]
+
+		if insertedKeys[ouiKeyString] {
+			continue
+		}
+		insertedKeys[ouiKeyString] = true
+
+		statement, err = database.Prepare("INSERT INTO oui (oui, organization) VALUES (?, ?)")
+		if err != nil {
+			logger.Fatalf("error preparing statemnt %v", err.Error())
+		}
+
+		_, err = statement.Exec(ouiKeyString, organization)
+		if err != nil {
+			logger.Fatalf("error executing statemnt %v", err.Error())
+		}
+	}
+
+	if err = scanner.Err(); err != nil {
+		log.Fatalf("scan file error: %v", err)
+	}
+
+	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
+}
 
 type leaseInfo struct {
 	ipAddress  net.IP
@@ -37,7 +125,7 @@ func (li *leaseInfo) String() string {
 
 type leaseMap map[string]*leaseInfo
 
-func readLeasesFile(leaseMapChannel chan leaseMap) {
+func readLeasesFile() leaseMap {
 	leaseMap := make(leaseMap)
 
 	leasesFile := defaultLeasesFile
@@ -134,65 +222,16 @@ func readLeasesFile(leaseMapChannel chan leaseMap) {
 
 	logger.Printf("read %v lines from %v", lineNumber, leasesFile)
 
-	leaseMapChannel <- leaseMap
+	return leaseMap
 }
 
-type ouiMap map[string]string
-
-func isHexDigits(s string) bool {
-	for _, r := range s {
-		if !(('0' <= r && '9' >= r) || ('a' <= r && 'f' >= r) || ('A' <= r && 'F' >= r)) {
-			return false
-		}
-	}
-	return true
-}
-
-func readOuiFile(ouiMapChannel chan ouiMap) {
-	ouiMap := make(ouiMap)
-
-	ouiFile := defaultOuiFile
-	if envValue, ok := os.LookupEnv("OUI_FILE"); ok {
-		ouiFile = envValue
-	}
-
-	logger.Printf("reading %v", ouiFile)
-	file, err := os.OpenFile(ouiFile, os.O_RDONLY, os.ModePerm)
+func printLeaseMap(leaseMap leaseMap) {
+	database, err := sql.Open(ouiDBDriver, ouiDBReadDSN)
 	if err != nil {
-		logger.Fatalf("Failed to open file %v %s\n", ouiFile, err.Error())
+		logger.Fatalf("error opening db dsn %v %v", ouiDBReadDSN, err.Error())
 	}
-	defer file.Close()
+	defer database.Close()
 
-	lineNumber := 0
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lineNumber++
-
-		line := strings.TrimSpace(scanner.Text())
-
-		if len(line) < 23 {
-			continue
-		}
-
-		ouiString := line[0:6]
-		if !isHexDigits(ouiString) {
-			continue
-		}
-
-		ouiString = strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
-		ouiMap[ouiString] = line[22:]
-	}
-
-	if err = scanner.Err(); err != nil {
-		log.Fatalf("scan file error: %v", err)
-	}
-
-	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
-
-	ouiMapChannel <- ouiMap
-}
-
-func printLeaseMap(leaseMap leaseMap, ouiMap ouiMap) {
 	const formatString = "%-17v%-19v%-6v%-22v%-27v%-27v%-27v%-24v"
 
 	logger.Printf("")
@@ -213,10 +252,20 @@ func printLeaseMap(leaseMap leaseMap, ouiMap ouiMap) {
 		leaseInfo := leaseMap[ipString]
 		macString := leaseInfo.macAddress.String()
 		ouiString := strings.ToLower(macString[0:8])
-		organization, ok := ouiMap[ouiString]
-		if !ok {
-			organization = "UNKNOWN"
+		organization := "UNKNOWN"
+
+		rows, err := database.Query("SELECT organization FROM oui WHERE oui = ?", ouiString)
+		if err != nil {
+			logger.Fatalf("db Query error %v", err.Error())
 		}
+		if rows.Next() {
+			rows.Scan(&organization)
+		}
+		err = rows.Close()
+		if err != nil {
+			logger.Fatalf("error closing rows %v", err.Error())
+		}
+
 		logger.Printf(
 			formatString,
 			ipString,
@@ -231,11 +280,11 @@ func printLeaseMap(leaseMap leaseMap, ouiMap ouiMap) {
 }
 
 func main() {
-	leaseMapChannel := make(chan leaseMap)
-	go readLeasesFile(leaseMapChannel)
-
-	ouiMapChannel := make(chan ouiMap)
-	go readOuiFile(ouiMapChannel)
-
-	printLeaseMap(<-leaseMapChannel, <-ouiMapChannel)
+	if (len(os.Args) == 2) && (os.Args[1] == "-createdb") {
+		logger.Printf("createdb mode")
+		createOuiDB()
+	} else {
+		leaseMap := readLeasesFile()
+		printLeaseMap(leaseMap)
+	}
 }
