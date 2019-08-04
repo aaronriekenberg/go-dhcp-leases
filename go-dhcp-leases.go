@@ -91,13 +91,13 @@ func createOuiDB() {
 			}
 		}
 
+		if err = scanner.Err(); err != nil {
+			return err
+		}
+
 		return nil
 	}); err != nil {
 		log.Fatalf("db.Update error %v", err)
-	}
-
-	if err = scanner.Err(); err != nil {
-		log.Fatalf("scan file error: %v", err)
 	}
 
 	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
