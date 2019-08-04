@@ -42,7 +42,7 @@ func createOuiDB() {
 
 	db, err := bolt.Open(ouiDBFile, 0600, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("bolt.Open error %v", err)
 	}
 	defer db.Close()
 
@@ -222,7 +222,7 @@ func readLeasesFile() leaseMap {
 func printLeaseMap(leaseMap leaseMap) {
 	db, err := bolt.Open(ouiDBFile, 0600, &bolt.Options{ReadOnly: true})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("bolt.Open error %v", err)
 	}
 	defer db.Close()
 
@@ -254,7 +254,7 @@ func printLeaseMap(leaseMap leaseMap) {
 			}
 			return nil
 		}); err != nil {
-			log.Fatal(err)
+			log.Fatalf("db.View error %v", err)
 		}
 
 		logger.Printf(
