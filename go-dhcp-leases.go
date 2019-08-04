@@ -180,7 +180,7 @@ func readOuiFile(ouiMapChannel chan ouiMap) {
 		}
 
 		ouiString = strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
-		ouiMap[strings.ToLower(ouiString)] = line[22:]
+		ouiMap[ouiString] = line[22:]
 	}
 
 	if err = scanner.Err(); err != nil {
