@@ -195,6 +195,7 @@ func readOuiFile(ouiMapChannel chan ouiMap) {
 func printLeaseMap(leaseMap leaseMap, ouiMap ouiMap) {
 	const formatString = "%-17v%-19v%-6v%-22v%-27v%-27v%-27v%-24v"
 
+	logger.Printf("")
 	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "Start Time", "End Time", "Last Transaction Time", "Organization")
 	logger.Printf(strings.Repeat("#", 180))
 
