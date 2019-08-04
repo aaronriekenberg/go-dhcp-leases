@@ -237,8 +237,5 @@ func main() {
 	ouiMapChannel := make(chan ouiMap)
 	go readOuiFile(ouiMapChannel)
 
-	leaseMap := <-leaseMapChannel
-	ouiMap := <-ouiMapChannel
-
-	printLeaseMap(leaseMap, ouiMap)
+	printLeaseMap(<-leaseMapChannel, <-ouiMapChannel)
 }
