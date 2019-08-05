@@ -20,6 +20,7 @@ const (
 	defaultLeasesFile       = "/var/lib/dhcp/dhcpd.leases"
 	defaultOuiFile          = "/usr/local/etc/oui.txt"
 	ouiDBFile               = "./oui.db"
+	ouiDBWriteTXSize        = 1000
 	ouiToOrganizationBucket = "ouiToOrganization"
 	leaseTimeFormatString   = "2006/01/02 15:04:05;"
 	ouputTimeFormatString   = "2006/01/02 15:04:05 -0700"
@@ -54,50 +55,70 @@ func createOuiDB() {
 	defer file.Close()
 
 	insertedKeys := make(map[string]bool)
+	ouiToOrganizationToInsert := make(map[string]string)
+
+	insertIntoDB := func() {
+		logger.Printf("running update tx len(ouiToOrganizationToInsert) = %v", len(ouiToOrganizationToInsert))
+
+		if err := db.Update(func(tx *bolt.Tx) error {
+
+			bucket, err := tx.CreateBucketIfNotExists([]byte(ouiToOrganizationBucket))
+			if err != nil {
+				return err
+			}
+
+			for key, value := range ouiToOrganizationToInsert {
+				if err = bucket.Put([]byte(key), []byte(value)); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}); err != nil {
+			log.Fatalf("db.Update error %v", err)
+		}
+
+		ouiToOrganizationToInsert = make(map[string]string)
+	}
+
 	lineNumber := 0
 	scanner := bufio.NewScanner(file)
 
-	if err := db.Update(func(tx *bolt.Tx) error {
+	for scanner.Scan() {
+		lineNumber++
 
-		bucket, err := tx.CreateBucket([]byte(ouiToOrganizationBucket))
-		if err != nil {
-			return err
+		line := strings.TrimSpace(scanner.Text())
+
+		if len(line) < 23 {
+			continue
 		}
 
-		for scanner.Scan() {
-			lineNumber++
-
-			line := strings.TrimSpace(scanner.Text())
-
-			if len(line) < 23 {
-				continue
-			}
-
-			ouiString := line[0:6]
-			if !isHexDigits(ouiString) {
-				continue
-			}
-
-			ouiKeyString := strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
-			organization := line[22:]
-
-			if insertedKeys[ouiKeyString] {
-				continue
-			}
-			insertedKeys[ouiKeyString] = true
-
-			if err = bucket.Put([]byte(ouiKeyString), []byte(organization)); err != nil {
-				return err
-			}
+		ouiString := line[0:6]
+		if !isHexDigits(ouiString) {
+			continue
 		}
 
-		if err = scanner.Err(); err != nil {
-			return err
+		ouiKeyString := strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
+		organization := line[22:]
+
+		if insertedKeys[ouiKeyString] {
+			continue
+		}
+		insertedKeys[ouiKeyString] = true
+		ouiToOrganizationToInsert[ouiKeyString] = organization
+
+		if len(ouiToOrganizationToInsert) >= ouiDBWriteTXSize {
+			insertIntoDB()
 		}
 
-		return nil
-	}); err != nil {
-		log.Fatalf("db.Update error %v", err)
+	}
+
+	if err = scanner.Err(); err != nil {
+		logger.Fatalf("scanner error %v", err.Error())
+	}
+
+	if len(ouiToOrganizationToInsert) > 0 {
+		insertIntoDB()
 	}
 
 	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
