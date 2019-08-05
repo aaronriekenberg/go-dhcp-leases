@@ -43,7 +43,7 @@ func createOuiDB() {
 
 	db, err := bolt.Open(ouiDBFile, 0600, nil)
 	if err != nil {
-		log.Fatalf("bolt.Open error %v", err)
+		logger.Fatalf("bolt.Open error %v", err)
 	}
 	defer db.Close()
 
@@ -75,7 +75,7 @@ func createOuiDB() {
 
 			return nil
 		}); err != nil {
-			log.Fatalf("db.Update error %v", err)
+			logger.Fatalf("db.Update error %v", err)
 		}
 
 		ouiToOrganizationToInsert = make(map[string]string)
@@ -232,7 +232,7 @@ func readLeasesFile() leaseMap {
 	}
 
 	if err = scanner.Err(); err != nil {
-		log.Fatalf("scan file error: %v", err)
+		logger.Fatalf("scan file error: %v", err)
 	}
 
 	logger.Printf("read %v lines from %v", lineNumber, leasesFile)
@@ -243,7 +243,7 @@ func readLeasesFile() leaseMap {
 func printLeaseMap(leaseMap leaseMap) {
 	db, err := bolt.Open(ouiDBFile, 0600, &bolt.Options{ReadOnly: true})
 	if err != nil {
-		log.Fatalf("bolt.Open error %v", err)
+		logger.Fatalf("bolt.Open error %v", err)
 	}
 	defer db.Close()
 
@@ -275,7 +275,7 @@ func printLeaseMap(leaseMap leaseMap) {
 			}
 			return nil
 		}); err != nil {
-			log.Fatalf("db.View error %v", err)
+			logger.Fatalf("db.View error %v", err)
 		}
 
 		logger.Printf(
