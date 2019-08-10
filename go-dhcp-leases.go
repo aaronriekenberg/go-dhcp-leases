@@ -178,7 +178,7 @@ func readLeasesFile() leaseMap {
 			if strings.HasPrefix(line, "starts") {
 				split := strings.Split(line, " ")
 				timeString := split[2] + " " + split[3]
-				startTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.Local)
+				startTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
 					logger.Fatalf("error parsing start timeString '%v' %v", timeString, err.Error())
 				}
@@ -186,7 +186,7 @@ func readLeasesFile() leaseMap {
 			} else if strings.HasPrefix(line, "ends") {
 				split := strings.Split(line, " ")
 				timeString := split[2] + " " + split[3]
-				endTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.Local)
+				endTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
 					logger.Fatalf("error parsing end timeString '%v' %v", timeString, err.Error())
 				}
@@ -194,7 +194,7 @@ func readLeasesFile() leaseMap {
 			} else if strings.HasPrefix(line, "cltt") {
 				split := strings.Split(line, " ")
 				timeString := split[2] + " " + split[3]
-				clttTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.Local)
+				clttTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
 					logger.Fatalf("error parsing cltt timeString '%v' %v", timeString, err.Error())
 				}
@@ -284,9 +284,9 @@ func printLeaseMap(leaseMap leaseMap) {
 			macString,
 			leaseInfo.count,
 			leaseInfo.hostname,
-			leaseInfo.startTime.Format(ouputTimeFormatString),
-			leaseInfo.endTime.Format(ouputTimeFormatString),
-			leaseInfo.clttTime.Format(ouputTimeFormatString),
+			leaseInfo.startTime.Local().Format(ouputTimeFormatString),
+			leaseInfo.endTime.Local().Format(ouputTimeFormatString),
+			leaseInfo.clttTime.Local().Format(ouputTimeFormatString),
 			organization)
 	}
 }
