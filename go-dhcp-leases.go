@@ -139,7 +139,7 @@ func (li *leaseInfo) String() string {
 	return fmt.Sprintf("ipAddress=%v startTime=%v endTime=%v clttTime=%v macAddress=%v hostname=%v", li.ipAddress.String(), li.startTime, li.endTime, li.clttTime, li.macAddress.String(), li.hostname)
 }
 
-func (li *leaseInfo) getState(now time.Time) string {
+func (li *leaseInfo) GetState(now time.Time) string {
 	switch {
 	case li.abandoned:
 		return "Abandoned"
@@ -300,7 +300,7 @@ func printLeaseMap(leaseMap leaseMap) {
 			macString,
 			leaseInfo.count,
 			leaseInfo.hostname,
-			leaseInfo.getState(now),
+			leaseInfo.GetState(now),
 			leaseInfo.endTime.Local().Format(ouputTimeFormatString),
 			leaseInfo.clttTime.Local().Format(ouputTimeFormatString),
 			organization)
