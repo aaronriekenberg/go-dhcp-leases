@@ -328,7 +328,7 @@ func printLeaseMap(leaseMap leaseMap) {
 			macString,
 			leaseInfo.count,
 			leaseInfo.hostname,
-			leaseInfo.GetState(now),
+			leaseState,
 			leaseInfo.endTime.Local().Format(ouputTimeFormatString),
 			leaseInfo.clttTime.Local().Format(ouputTimeFormatString),
 			organization)
