@@ -54,7 +54,6 @@ func createOuiDB() {
 	}
 	defer file.Close()
 
-	insertedKeys := make(map[string]bool)
 	ouiToOrganizationToInsert := make(map[string]string)
 
 	insertIntoDB := func() {
@@ -101,12 +100,7 @@ func createOuiDB() {
 		ouiKeyString := strings.ToLower(ouiString[0:2] + ":" + ouiString[2:4] + ":" + ouiString[4:6])
 		organization := line[22:]
 
-		if insertedKeys[ouiKeyString] {
-			continue
-		}
-		insertedKeys[ouiKeyString] = true
 		ouiToOrganizationToInsert[ouiKeyString] = organization
-
 		if len(ouiToOrganizationToInsert) >= ouiDBWriteTXSize {
 			insertIntoDB()
 		}
