@@ -132,10 +132,23 @@ type leaseInfo struct {
 	clttTime   time.Time
 	macAddress net.HardwareAddr
 	hostname   string
+	abandoned  bool
 }
 
 func (li *leaseInfo) String() string {
 	return fmt.Sprintf("ipAddress=%v startTime=%v endTime=%v clttTime=%v macAddress=%v hostname=%v", li.ipAddress.String(), li.startTime, li.endTime, li.clttTime, li.macAddress.String(), li.hostname)
+}
+
+func (li *leaseInfo) getState(now time.Time) string {
+	if li.abandoned {
+		return "Abandoned"
+	} else if now.Before(li.startTime) {
+		return "Future"
+	} else if (now.After(li.startTime) || now.Equal(li.startTime)) && (now.Before(li.endTime) || now.Equal(li.endTime)) {
+		return "Current"
+	} else {
+		return "Past"
+	}
 }
 
 type leaseMap map[string]*leaseInfo
@@ -209,6 +222,8 @@ func readLeasesFile() leaseMap {
 			} else if strings.HasPrefix(line, "client-hostname ") {
 				hostname := strings.Split(line, "\"")[1]
 				currentLeaseInfo.hostname = hostname
+			} else if strings.HasPrefix(line, "abandoned;") {
+				currentLeaseInfo.abandoned = true
 			} else if strings.HasPrefix(line, "}") {
 				withinLease = false
 				if currentLeaseInfo != nil {
@@ -247,10 +262,10 @@ func printLeaseMap(leaseMap leaseMap) {
 	}
 	defer db.Close()
 
-	const formatString = "%-17v%-19v%-6v%-22v%-27v%-27v%-27v%-24v"
+	const formatString = "%-17v%-19v%-6v%-22v%-10v%-27v%-27v%-24v"
 
 	logger.Printf("")
-	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "Start Time", "End Time", "Last Transaction Time", "Organization")
+	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "State", "End Time", "Last Transaction Time", "Organization")
 	logger.Printf(strings.Repeat("=", 180))
 
 	ipAddresses := make([]net.IP, 0, len(leaseMap))
@@ -261,6 +276,8 @@ func printLeaseMap(leaseMap leaseMap) {
 	sort.Slice(ipAddresses, func(i int, j int) bool {
 		return (bytes.Compare(ipAddresses[i], ipAddresses[j]) < 0)
 	})
+
+	now := time.Now()
 
 	for _, ipAddress := range ipAddresses {
 		ipString := ipAddress.String()
@@ -284,7 +301,7 @@ func printLeaseMap(leaseMap leaseMap) {
 			macString,
 			leaseInfo.count,
 			leaseInfo.hostname,
-			leaseInfo.startTime.Local().Format(ouputTimeFormatString),
+			leaseInfo.getState(now),
 			leaseInfo.endTime.Local().Format(ouputTimeFormatString),
 			leaseInfo.clttTime.Local().Format(ouputTimeFormatString),
 			organization)
