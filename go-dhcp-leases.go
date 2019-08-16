@@ -187,7 +187,8 @@ func readLeasesFile() leaseMap {
 				}
 			}
 		} else {
-			if strings.HasPrefix(line, "starts") {
+			switch {
+			case strings.HasPrefix(line, "starts"):
 				split := strings.Split(line, " ")
 				timeString := split[2] + " " + split[3]
 				startTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
@@ -195,7 +196,7 @@ func readLeasesFile() leaseMap {
 					logger.Fatalf("error parsing start timeString '%v' %v", timeString, err.Error())
 				}
 				currentLeaseInfo.startTime = startTime
-			} else if strings.HasPrefix(line, "ends") {
+			case strings.HasPrefix(line, "ends"):
 				split := strings.Split(line, " ")
 				timeString := split[2] + " " + split[3]
 				endTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
@@ -203,7 +204,7 @@ func readLeasesFile() leaseMap {
 					logger.Fatalf("error parsing end timeString '%v' %v", timeString, err.Error())
 				}
 				currentLeaseInfo.endTime = endTime
-			} else if strings.HasPrefix(line, "cltt") {
+			case strings.HasPrefix(line, "cltt"):
 				split := strings.Split(line, " ")
 				timeString := split[2] + " " + split[3]
 				clttTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
@@ -211,19 +212,19 @@ func readLeasesFile() leaseMap {
 					logger.Fatalf("error parsing cltt timeString '%v' %v", timeString, err.Error())
 				}
 				currentLeaseInfo.clttTime = clttTime
-			} else if strings.HasPrefix(line, "hardware ethernet ") {
+			case strings.HasPrefix(line, "hardware ethernet "):
 				macString := strings.Split(strings.Split(line, " ")[2], ";")[0]
 				macAddress, err := net.ParseMAC(macString)
 				if err != nil {
 					logger.Fatalf("error parsing macString '%v' %v", macString, err.Error())
 				}
 				currentLeaseInfo.macAddress = macAddress
-			} else if strings.HasPrefix(line, "client-hostname ") {
+			case strings.HasPrefix(line, "client-hostname "):
 				hostname := strings.Split(line, "\"")[1]
 				currentLeaseInfo.hostname = hostname
-			} else if strings.HasPrefix(line, "abandoned;") {
+			case strings.HasPrefix(line, "abandoned;"):
 				currentLeaseInfo.abandoned = true
-			} else if strings.HasPrefix(line, "}") {
+			case strings.HasPrefix(line, "}"):
 				if currentLeaseInfo != nil {
 					ipString := currentIP.String()
 					existingLeaseInfo, ok := leaseMap[ipString]
