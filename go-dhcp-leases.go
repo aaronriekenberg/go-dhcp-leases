@@ -123,7 +123,7 @@ type leaseState int
 const (
 	// Abandoned lease
 	Abandoned leaseState = iota
-	//Future lease
+	// Future lease
 	Future
 	// Current lease
 	Current
