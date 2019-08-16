@@ -251,7 +251,7 @@ func printLeaseMap(leaseMap leaseMap) {
 
 	logger.Printf("")
 	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "Start Time", "End Time", "Last Transaction Time", "Organization")
-	logger.Printf(strings.Repeat("#", 180))
+	logger.Printf(strings.Repeat("=", 180))
 
 	ipAddresses := make([]net.IP, 0, len(leaseMap))
 	for _, leaseInfo := range leaseMap {
