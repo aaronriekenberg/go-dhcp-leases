@@ -118,6 +118,35 @@ func createOuiDB() {
 	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
 }
 
+type leaseState int
+
+const (
+	// Abandoned lease
+	Abandoned leaseState = iota
+	//Future lease
+	Future
+	// Current lease
+	Current
+	// Past lease
+	Past
+)
+
+var leaseStates = []leaseState{Abandoned, Future, Current, Past}
+
+func (leaseState leaseState) String() string {
+	switch leaseState {
+	case Abandoned:
+		return "Abandoned"
+	case Future:
+		return "Future"
+	case Current:
+		return "Current"
+	case Past:
+		return "Past"
+	}
+	return "UNKNOWN"
+}
+
 type leaseInfo struct {
 	ipAddress  net.IP
 	count      int
@@ -133,16 +162,16 @@ func (li *leaseInfo) String() string {
 	return fmt.Sprintf("ipAddress=%v startTime=%v endTime=%v clttTime=%v macAddress=%v hostname=%v", li.ipAddress.String(), li.startTime, li.endTime, li.clttTime, li.macAddress.String(), li.hostname)
 }
 
-func (li *leaseInfo) GetState(now time.Time) string {
+func (li *leaseInfo) GetState(now time.Time) leaseState {
 	switch {
 	case li.abandoned:
-		return "Abandoned"
+		return Abandoned
 	case now.Before(li.startTime):
-		return "Future"
+		return Future
 	case (now.After(li.startTime) || now.Equal(li.startTime)) && (now.Before(li.endTime) || now.Equal(li.endTime)):
-		return "Current"
+		return Current
 	default:
-		return "Past"
+		return Past
 	}
 }
 
@@ -270,6 +299,8 @@ func printLeaseMap(leaseMap leaseMap) {
 		return (bytes.Compare(ipAddresses[i], ipAddresses[j]) < 0)
 	})
 
+	leaseStateToCount := make(map[leaseState]int)
+
 	now := time.Now()
 
 	for _, ipAddress := range ipAddresses {
@@ -288,6 +319,9 @@ func printLeaseMap(leaseMap leaseMap) {
 			logger.Fatalf("db.View error %v", err)
 		}
 
+		leaseState := leaseInfo.GetState(now)
+		leaseStateToCount[leaseState]++
+
 		logger.Printf(
 			formatString,
 			ipString,
@@ -298,6 +332,12 @@ func printLeaseMap(leaseMap leaseMap) {
 			leaseInfo.endTime.Local().Format(ouputTimeFormatString),
 			leaseInfo.clttTime.Local().Format(ouputTimeFormatString),
 			organization)
+	}
+
+	logger.Printf("")
+	logger.Printf("%v leases with unique IPs:", len(leaseMap))
+	for _, state := range leaseStates {
+		logger.Printf("\t%v %v", leaseStateToCount[state], state)
 	}
 }
 
