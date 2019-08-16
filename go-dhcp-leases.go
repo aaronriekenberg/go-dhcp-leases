@@ -172,21 +172,19 @@ func readLeasesFile() leaseMap {
 	lineNumber := 0
 	var currentIP net.IP
 	var currentLeaseInfo *leaseInfo
-	withinLease := false
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		lineNumber++
 
 		line := strings.TrimSpace(scanner.Text())
 
-		if !withinLease {
+		if currentLeaseInfo == nil {
 			if strings.HasPrefix(line, "lease ") && strings.HasSuffix(line, " {") {
 				currentIP = net.ParseIP(strings.Split(line, " ")[1])
 				currentLeaseInfo = &leaseInfo{
 					ipAddress: currentIP,
 					count:     1,
 				}
-				withinLease = true
 			}
 		} else {
 			if strings.HasPrefix(line, "starts") {
@@ -226,7 +224,6 @@ func readLeasesFile() leaseMap {
 			} else if strings.HasPrefix(line, "abandoned;") {
 				currentLeaseInfo.abandoned = true
 			} else if strings.HasPrefix(line, "}") {
-				withinLease = false
 				if currentLeaseInfo != nil {
 					ipString := currentIP.String()
 					existingLeaseInfo, ok := leaseMap[ipString]
