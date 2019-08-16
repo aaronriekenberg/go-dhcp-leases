@@ -140,13 +140,14 @@ func (li *leaseInfo) String() string {
 }
 
 func (li *leaseInfo) getState(now time.Time) string {
-	if li.abandoned {
+	switch {
+	case li.abandoned:
 		return "Abandoned"
-	} else if now.Before(li.startTime) {
+	case now.Before(li.startTime):
 		return "Future"
-	} else if (now.After(li.startTime) || now.Equal(li.startTime)) && (now.Before(li.endTime) || now.Equal(li.endTime)) {
+	case (now.After(li.startTime) || now.Equal(li.startTime)) && (now.Before(li.endTime) || now.Equal(li.endTime)):
 		return "Current"
-	} else {
+	default:
 		return "Past"
 	}
 }
