@@ -50,7 +50,7 @@ func createOuiDB() {
 	logger.Printf("reading %v", ouiFile)
 	file, err := os.OpenFile(ouiFile, os.O_RDONLY, os.ModePerm)
 	if err != nil {
-		logger.Fatalf("Failed to open file %v %s\n", ouiFile, err.Error())
+		logger.Fatalf("Failed to open file %v %s\n", ouiFile, err)
 	}
 	defer file.Close()
 
@@ -108,7 +108,7 @@ func createOuiDB() {
 	}
 
 	if err = scanner.Err(); err != nil {
-		logger.Fatalf("scanner error %v", err.Error())
+		logger.Fatalf("scanner error %v", err)
 	}
 
 	if len(ouiToOrganizationToInsert) > 0 {
@@ -188,7 +188,7 @@ func readLeasesFile() leaseMap {
 	logger.Printf("reading %v", leasesFile)
 	file, err := os.OpenFile(leasesFile, os.O_RDONLY, os.ModePerm)
 	if err != nil {
-		logger.Fatalf("Failed to open file %v %s\n", leasesFile, err.Error())
+		logger.Fatalf("Failed to open file %v %s\n", leasesFile, err)
 	}
 	defer file.Close()
 
@@ -216,7 +216,7 @@ func readLeasesFile() leaseMap {
 				timeString := split[2] + " " + split[3]
 				startTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
-					logger.Fatalf("error parsing start timeString '%v' %v", timeString, err.Error())
+					logger.Fatalf("error parsing start timeString '%v' %v", timeString, err)
 				}
 				currentLeaseInfo.startTime = startTime
 			case strings.HasPrefix(line, "ends"):
@@ -224,7 +224,7 @@ func readLeasesFile() leaseMap {
 				timeString := split[2] + " " + split[3]
 				endTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
-					logger.Fatalf("error parsing end timeString '%v' %v", timeString, err.Error())
+					logger.Fatalf("error parsing end timeString '%v' %v", timeString, err)
 				}
 				currentLeaseInfo.endTime = endTime
 			case strings.HasPrefix(line, "cltt"):
@@ -232,14 +232,14 @@ func readLeasesFile() leaseMap {
 				timeString := split[2] + " " + split[3]
 				clttTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
-					logger.Fatalf("error parsing cltt timeString '%v' %v", timeString, err.Error())
+					logger.Fatalf("error parsing cltt timeString '%v' %v", timeString, err)
 				}
 				currentLeaseInfo.clttTime = clttTime
 			case strings.HasPrefix(line, "hardware ethernet "):
 				macString := strings.Split(strings.Split(line, " ")[2], ";")[0]
 				macAddress, err := net.ParseMAC(macString)
 				if err != nil {
-					logger.Fatalf("error parsing macString '%v' %v", macString, err.Error())
+					logger.Fatalf("error parsing macString '%v' %v", macString, err)
 				}
 				currentLeaseInfo.macAddress = macAddress
 			case strings.HasPrefix(line, "client-hostname "):
