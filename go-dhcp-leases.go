@@ -14,7 +14,7 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-var logger = log.New(os.Stdout, "", 0)
+var gitCommit string
 
 const (
 	defaultLeasesFile       = "/var/lib/dhcp/dhcpd.leases"
@@ -43,21 +43,21 @@ func createOuiDB() {
 
 	db, err := bolt.Open(ouiDBFile, 0600, nil)
 	if err != nil {
-		logger.Fatalf("bolt.Open error %v", err)
+		log.Fatalf("bolt.Open error %v", err)
 	}
 	defer db.Close()
 
-	logger.Printf("reading %v", ouiFile)
+	log.Printf("reading %v", ouiFile)
 	file, err := os.OpenFile(ouiFile, os.O_RDONLY, os.ModePerm)
 	if err != nil {
-		logger.Fatalf("Failed to open file %v %s\n", ouiFile, err)
+		log.Fatalf("Failed to open file %v %s\n", ouiFile, err)
 	}
 	defer file.Close()
 
 	ouiToOrganizationToInsert := make(map[string]string)
 
 	insertIntoDB := func() {
-		logger.Printf("running update tx len(ouiToOrganizationToInsert) = %v", len(ouiToOrganizationToInsert))
+		log.Printf("running update tx len(ouiToOrganizationToInsert) = %v", len(ouiToOrganizationToInsert))
 
 		if err := db.Update(func(tx *bolt.Tx) error {
 
@@ -74,7 +74,7 @@ func createOuiDB() {
 
 			return nil
 		}); err != nil {
-			logger.Fatalf("db.Update error %v", err)
+			log.Fatalf("db.Update error %v", err)
 		}
 
 		ouiToOrganizationToInsert = make(map[string]string)
@@ -108,14 +108,14 @@ func createOuiDB() {
 	}
 
 	if err = scanner.Err(); err != nil {
-		logger.Fatalf("scanner error %v", err)
+		log.Fatalf("scanner error %v", err)
 	}
 
 	if len(ouiToOrganizationToInsert) > 0 {
 		insertIntoDB()
 	}
 
-	logger.Printf("read %v lines from %v", lineNumber, ouiFile)
+	log.Printf("read %v lines from %v", lineNumber, ouiFile)
 }
 
 type leaseState int
@@ -185,10 +185,10 @@ func readLeasesFile() leaseMap {
 		leasesFile = envValue
 	}
 
-	logger.Printf("reading %v", leasesFile)
+	log.Printf("reading %v", leasesFile)
 	file, err := os.OpenFile(leasesFile, os.O_RDONLY, os.ModePerm)
 	if err != nil {
-		logger.Fatalf("Failed to open file %v %s\n", leasesFile, err)
+		log.Fatalf("Failed to open file %v %s\n", leasesFile, err)
 	}
 	defer file.Close()
 
@@ -216,7 +216,7 @@ func readLeasesFile() leaseMap {
 				timeString := split[2] + " " + split[3]
 				startTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
-					logger.Fatalf("error parsing start timeString '%v' %v", timeString, err)
+					log.Fatalf("error parsing start timeString '%v' %v", timeString, err)
 				}
 				currentLeaseInfo.startTime = startTime
 			case strings.HasPrefix(line, "ends"):
@@ -224,7 +224,7 @@ func readLeasesFile() leaseMap {
 				timeString := split[2] + " " + split[3]
 				endTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
-					logger.Fatalf("error parsing end timeString '%v' %v", timeString, err)
+					log.Fatalf("error parsing end timeString '%v' %v", timeString, err)
 				}
 				currentLeaseInfo.endTime = endTime
 			case strings.HasPrefix(line, "cltt"):
@@ -232,14 +232,14 @@ func readLeasesFile() leaseMap {
 				timeString := split[2] + " " + split[3]
 				clttTime, err := time.ParseInLocation(leaseTimeFormatString, timeString, time.UTC)
 				if err != nil {
-					logger.Fatalf("error parsing cltt timeString '%v' %v", timeString, err)
+					log.Fatalf("error parsing cltt timeString '%v' %v", timeString, err)
 				}
 				currentLeaseInfo.clttTime = clttTime
 			case strings.HasPrefix(line, "hardware ethernet "):
 				macString := strings.Split(strings.Split(line, " ")[2], ";")[0]
 				macAddress, err := net.ParseMAC(macString)
 				if err != nil {
-					logger.Fatalf("error parsing macString '%v' %v", macString, err)
+					log.Fatalf("error parsing macString '%v' %v", macString, err)
 				}
 				currentLeaseInfo.macAddress = macAddress
 			case strings.HasPrefix(line, "client-hostname "):
@@ -269,10 +269,10 @@ func readLeasesFile() leaseMap {
 	}
 
 	if err = scanner.Err(); err != nil {
-		logger.Fatalf("scan file error: %v", err)
+		log.Fatalf("scan file error: %v", err)
 	}
 
-	logger.Printf("read %v lines from %v", lineNumber, leasesFile)
+	log.Printf("read %v lines from %v", lineNumber, leasesFile)
 
 	return leaseMap
 }
@@ -280,15 +280,15 @@ func readLeasesFile() leaseMap {
 func printLeaseMap(leaseMap leaseMap) {
 	db, err := bolt.Open(ouiDBFile, 0600, &bolt.Options{ReadOnly: true})
 	if err != nil {
-		logger.Fatalf("bolt.Open error %v", err)
+		log.Fatalf("bolt.Open error %v", err)
 	}
 	defer db.Close()
 
 	const formatString = "%-17v%-19v%-6v%-22v%-10v%-27v%-27v%-24v"
 
-	logger.Printf("")
-	logger.Printf(formatString, "IP", "MAC", "Count", "Hostname", "State", "End Time", "Last Transaction Time", "Organization")
-	logger.Printf(strings.Repeat("=", 180))
+	log.Printf("")
+	log.Printf(formatString, "IP", "MAC", "Count", "Hostname", "State", "End Time", "Last Transaction Time", "Organization")
+	log.Printf(strings.Repeat("=", 180))
 
 	ipAddresses := make([]net.IP, 0, len(leaseMap))
 	for _, leaseInfo := range leaseMap {
@@ -316,13 +316,13 @@ func printLeaseMap(leaseMap leaseMap) {
 			}
 			return nil
 		}); err != nil {
-			logger.Fatalf("db.View error %v", err)
+			log.Fatalf("db.View error %v", err)
 		}
 
 		leaseState := leaseInfo.GetState(now)
 		leaseStateToCount[leaseState]++
 
-		logger.Printf(
+		log.Printf(
 			formatString,
 			ipString,
 			macString,
@@ -334,16 +334,20 @@ func printLeaseMap(leaseMap leaseMap) {
 			organization)
 	}
 
-	logger.Printf("")
-	logger.Printf("%v leases with unique IPs:", len(leaseMap))
+	log.Printf("")
+	log.Printf("%v leases with unique IPs:", len(leaseMap))
 	for _, state := range leaseStates {
-		logger.Printf("\t%v %v", leaseStateToCount[state], state)
+		log.Printf("\t%v %v", leaseStateToCount[state], state)
 	}
 }
 
 func main() {
+	log.SetFlags(0)
+
+	log.Printf("gitCommit: %v", gitCommit)
+
 	if (len(os.Args) == 2) && (os.Args[1] == "-createdb") {
-		logger.Printf("createdb mode")
+		log.Printf("createdb mode")
 		createOuiDB()
 	} else {
 		leaseMap := readLeasesFile()
